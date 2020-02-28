@@ -13,12 +13,15 @@ def main():
     iris_train = iris.drop('Species', 1).drop('Id', 1)
 
     # target
-    # print(iris_train)
     iris_target = iris['Species']
-    # print(len(set(iris_target)))
-    # print(iris_train.values.tolist())
-    mlp = MLP((3,3),5)
-    mlp.fit(iris_train, iris_target)
+    mlp = MLP((200,),1)
+    mlp.fit(iris_train, iris_target, threshold=0.01, learning_rate=0.005)
+
+    # iris_goal = iris_target[:15].values.tolist() + iris_target[50:65].values.tolist() + iris_target[100:115].values.tolist()
+    iris_test = iris_train[:15].values.tolist() + iris_train[50:65].values.tolist() + iris_train[100:115].values.tolist()
+    # print(iris_goal)
+    print(mlp.predict(iris_train.values.tolist()))
+    # print(mlp.weights)
 
 if __name__ == "__main__":
     main()

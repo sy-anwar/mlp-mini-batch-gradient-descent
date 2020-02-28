@@ -1,3 +1,4 @@
+import itertools, random
 import numpy as np
 import pandas as pd
 from copy import copy, deepcopy
@@ -10,6 +11,7 @@ class MLP(object):
         self.max_iter = max_iter
         self.weights = []
         self.bias = 1
+        self.unique_target = []
 
     def sigmoid(self, x):
         return 1/(1 + np.exp(-x))
@@ -20,13 +22,20 @@ class MLP(object):
     
     def count_output_layer(self, target):
         return len(set(target))
+    
+    def error(self, output, target):
+        return 1/2 * (target - output)**2
+
+    def calc_error(self, output_layer, targets):
+        return sum([self.error(output_layer[i], targets[i]) for i in range(len(output_layer))])
 
     def init_weights(self, n_input, n_output):
         weights = []
-        weights.append([[0. for col in range(self.hidden_layers[0])] for row in range(n_input)])
+        random.seed(13517)
+        weights.append([[random.uniform(0,1) for col in range(self.hidden_layers[0])] for row in range(n_input)])
         for i in range(self.n_hidden_layer -1):
-            weights.append([[0. for col in range(self.hidden_layers[i+1])] for row in range(self.hidden_layers[i] +1)])
-        weights.append([[0. for col in range(n_output)] for row in range(self.hidden_layers[-1] +1)])
+            weights.append([[random.uniform(0,1) for col in range(self.hidden_layers[i+1])] for row in range(self.hidden_layers[i] +1)])
+        weights.append([[random.uniform(0,1) for col in range(n_output)] for row in range(self.hidden_layers[-1] +1)])
         return weights
 
     def create_batchs(self, training_data, batch_size):
@@ -41,7 +50,7 @@ class MLP(object):
 
     def forward(self, data):
         nodes_per_layer = []
-        net_values = np.dot(data +[self.bias], self.weights[0]).tolist()
+        net_values = np.dot(data +[self.bias], self.weights[0])
         # append out value hidden layer 1 node +bias
         nodes_per_layer.append([self.sigmoid(x) for x in net_values])
         for i in range(self.n_hidden_layer):
@@ -51,18 +60,11 @@ class MLP(object):
             nodes_per_layer.append([self.sigmoid(x) for x in net_values])
         return nodes_per_layer
     
-    def error(self, output, target):
-        return 1/2 * (target - output)**2
-
-    def calc_error(self, output_layer):
-        return sum([self.error(x, 1) for x in output_layer])
-
-    def backward(self, data, output_per_layer, weight, learning_rate):
+    def backward(self, data, output_per_layer, weight, target, learning_rate):
         delta_err = deepcopy(output_per_layer)
         # delta output layer
-        target = 1
-        output_layer = output_per_layer[-1].copy()
-        delta_err[-1] = [x*(1-x)*(target-x) for x in output_layer]
+        output_layer = deepcopy(output_per_layer[-1])
+        delta_err[-1] = [output_layer[i]*(1-output_layer[i])*(target[i]-output_layer[i]) for i in range(len(output_layer))]
         # delta hidden layer
         for i in range(self.n_hidden_layer -1, -1, -1):
             for j in range(len(delta_err[i])):
@@ -98,19 +100,32 @@ class MLP(object):
                     if op == '/' and val != None:
                         arr_mat1[i][j][k] /= val
         return arr_mat1
+    
+    def build_target(self, target):
+        self.unique_target = list(set(target))
+        targets = [0 for i in range(len(self.unique_target) -1)] + [1]
+        targets = list(set(itertools.permutations(targets,len(self.unique_target))))
+        dict, new_t = {}, []
+        for i in range(len(self.unique_target)): dict[self.unique_target[i]] = targets[i] 
+        for i in range(len(target)): 
+            new_t.append(dict.get(target[i]))
+        return new_t        
         
-    def fit(self,training_data, target, batch_size = 10, learning_rate = 0.001):
+    def fit(self,training_data, target, batch_size = 10, learning_rate = 0.001, threshold=0.0001):
         # change training_data type to np.array
         training_data = training_data.values.tolist()
 
         n_input = self.count_input_layer(training_data)
         n_output = self.count_output_layer(target)
 
+        targets = self.build_target(target)
         # init weight 0
         self.weights = self.init_weights(n_input, n_output)
 
         # iteration
-        for itr in range(self.max_iter):
+        itr, error_total = 0, 99
+        while itr < self.max_iter and error_total > threshold:
+            i = 0 # data index
             batchs = self.create_batchs(training_data, batch_size)
             for b in range(len(batchs)):
                 mini_batch = deepcopy(batchs[b])
@@ -121,10 +136,26 @@ class MLP(object):
                     # feed forward
                     hid_out_layer = self.forward(mini_batch[it])
                     # Backward Phase
-                    temp_weights = self.operation(temp_weights, op='+', arr_mat2=self.backward(mini_batch[it], hid_out_layer, self.weights, learning_rate))
+                    # print("awal","\n=>",temp_weights,"\n")
+                    back = self.backward(mini_batch[it], hid_out_layer, self.weights, targets[i], learning_rate)
+                    temp_weights = self.operation(temp_weights, op='+', arr_mat2=back)
+                    error_total = self.calc_error(hid_out_layer[-1], targets[i])
+                    i += 1
                 # update weights
                 # weight nya di rata - rata baru di update
                 temp_weights = self.operation(temp_weights,val=len(batchs[b]), op='/')
                 self.weights = self.operation(self.weights, op='-', arr_mat2=temp_weights)
-                print(itr,"\n",self.weights,"\n")
-                    
+                # self.weights = deepcopy(temp_weights)
+                # print("batch", b,"\n=>",self.weights,"\n")
+            itr += 1
+            # print(itr)
+                        
+    def predict(self, data_test):
+        result = []
+        for i in range(len(data_test)):
+            res = self.forward(data_test[i])[-1]
+            result.append(self.unique_target[res.index(max(res))])
+            # print(i,res)
+        return result
+        
+
