@@ -157,5 +157,14 @@ class MLP(object):
             result.append(self.unique_target[res.index(max(res))])
             # print(i,res)
         return result
-        
 
+    def score(self, data_test, label_test):
+        results = self.predict(data_test)
+        count_right = 0
+        n_data = len(data_test)
+        
+        for result, label in zip(results, label_test):
+            if (result == label):
+                count_right = count_right + 1
+        
+        return count_right/n_data
